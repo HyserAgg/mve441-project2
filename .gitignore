@@ -1,0 +1,3 @@
+# Raw data is not to be included in repo
+*.tar.gz
+*.csv
