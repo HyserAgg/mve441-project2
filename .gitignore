@@ -1,7 +1,7 @@
 # Raw data is not to be included in repo
 *.tar.gz
 *.csv
-
+*.h5
 # JupyterNotebook specific file to ignore
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
