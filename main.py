@@ -1,23 +1,19 @@
 
-from http.client import NO_CONTENT
 from multiprocessing.dummy import active_children
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import plotly.express as px
 import matplotlib.pyplot as plt
 from os.path import exists
 from pyarrow import csv
-from sklearn import preprocessing
-from sklearn.preprocessing import MinMaxScaler, normalize,LabelEncoder, RobustScaler
+from sklearn.preprocessing import LabelEncoder, RobustScaler
 from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score 
-from sklearn.pipeline import Pipeline, make_pipeline
+from sklearn.pipeline import Pipeline
 from sklearn.cluster import KMeans
 from sklearn.feature_selection import VarianceThreshold
 from sklearn import mixture as mx
 from sklearn.base import BaseEstimator, TransformerMixin, clone
-from sklearn.datasets import make_blobs
 from scipy.stats.stats import pearsonr
 from numpy.random import randint
 from sympy import denom, numer
@@ -123,6 +119,8 @@ def question_1(X_, feature_df, label_df, plot):
     #pair_plot(X_, 5, true_labels)
 
     plt.show()
+
+    
 def question_2(feature_df, 
                     models, 
                     k = 100, 
