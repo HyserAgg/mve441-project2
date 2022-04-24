@@ -1,11 +1,14 @@
-
-from multiprocessing.dummy import active_children
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+
+# General 'from' import
 from os.path import exists
-from pyarrow import csv
+from sklearn import cluster
+from statsmodels.distributions.empirical_distribution import ECDF
+
+# Scikit-learn stuff
 from sklearn.preprocessing import LabelEncoder, RobustScaler
 from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score 
@@ -15,73 +18,33 @@ from sklearn.feature_selection import VarianceThreshold
 from sklearn import mixture as mx
 from sklearn.base import BaseEstimator, TransformerMixin, clone
 from scipy.stats.stats import pearsonr
-from numpy.random import randint
-from sympy import denom, numer
-from statsmodels.distributions.empirical_distribution import ECDF
-# Classes
-#--------------------------------------------------------------------------------------------------------#
-class VarianceFilter(BaseEstimator, TransformerMixin):
-    def __init__(self, thrshld):
-        self.thrshld = thrshld
 
-    def fit(self, X, y = None):
-        return self
-
-    def transform(self, X, y=None):
-        X_copy = X.copy()
-        X_norm = RobustScaler().fit_transform(X.copy())
-        X_var = X_norm.var(axis=0)
-        X_ = X_copy[:,(X_var < self.thrshld)]
-        _,m = np.shape(X_)
-        print(f"VF returns features of dim {m}")
-        return X_
-    
-class CorrelationFilter(BaseEstimator, TransformerMixin):
-    def __init__(self, thrshld):
-        self.thrshld = thrshld
-
-    def fit(self, X, y = None):
-        return self
-
-    def transform(self, X, y=None):
-        X_ = X.copy()
-        i = 0
-        _,m = np.shape(X_)
-        while i<m: 
-            _, m = np.shape(X_)
-            corr = np.zeros(shape = m, dtype = bool)
-            # Find correlation with all columns j>i
-            for j in range(i+1,m):
-                c, _ = pearsonr(X_[:,i],X_[:,j])
-                corr[j] = np.abs(c) > self.thrshld
-
-            X_ = np.delete(X_, corr, axis = 1)
-            if np.mod(m-i,50)== 0:
-                print(i,m)
-            i += 1
-        return X_
-
+# Local import
+from filters import VarianceFilter, CorrelationFilter
 
 def main():
     ## Load data ##
-    label_df, feature_df = load_SEQ_data();
+    label_df, feature_df = load_SEQ_data()
 
     ## Question 1 ##
-    q1_plot = {
-            "hist_plot":    False,
-            "scree_plot":   False,
-            "metrics_plot": False, 
-            "pair_plot":    False
-            }
+    #q1_plot = {
+    #        "hist_plot":    False,
+    #        "scree_plot":   False,
+    #        "metrics_plot": False, 
+    #        "pair_plot":    False
+    #        }
    # question_1(X_,preprocessor, true_labels, q1_plot)
    
     ## Question 2 ##
-    n_inits = 25
-    q2_clusters = range(2,8)
-    models = [KMeans(n_init = n_inits, init = 'k-means++', n_clusters=i) for i in q2_clusters]
-    PACs = question_2(feature_df, models)
-    print(PACs)
-    plt.show()
+    #n_inits = 25
+    #q2_clusters = range(2,8)
+    #models = [KMeans(n_init = n_inits, init = 'k-means++', n_clusters=i) for i in q2_clusters]
+    #PACs = question_2(feature_df, models)
+    #print(PACs)
+    #plt.show()
+
+    ## Question 3 ##
+    question_3()
 
 def question_1(X_, feature_df, label_df, plot):
     ## Models ## 
@@ -120,7 +83,7 @@ def question_1(X_, feature_df, label_df, plot):
 
     plt.show()
 
-    
+
 def question_2(feature_df, 
                     models, 
                     k = 100, 
@@ -228,6 +191,11 @@ def question_2(feature_df,
         PACs[model] = ecdf(Q[1])-ecdf(Q[0]) # PAC values for the different models
     plt.legend(models)
     return PACs
+
+
+def question_3():
+    cluster_methods = ["K-Means", "Gaussian Mixture"]
+    cluster_numbers = list(range(2,8))
 
 
 def run_clustering(X_,models, clusters):
