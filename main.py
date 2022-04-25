@@ -4,16 +4,13 @@ from multiprocessing.dummy import active_children
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import plotly.express as px
 import matplotlib.pyplot as plt
 from os.path import exists
-from pyarrow import csv
-from sklearn import preprocessing
 from sklearn.preprocessing import MinMaxScaler, normalize,LabelEncoder, RobustScaler
 from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score 
 from sklearn.pipeline import Pipeline, make_pipeline
-from sklearn.cluster import KMeans
+from sklearn.cluster import AgglomerativeClustering, KMeans
 from sklearn.feature_selection import VarianceThreshold
 from sklearn import mixture as mx
 from sklearn.base import BaseEstimator, TransformerMixin, clone
@@ -37,34 +34,9 @@ class VarianceFilter(BaseEstimator, TransformerMixin):
         X_var = X_norm.var(axis=0)
         X_ = X_copy[:,(X_var < self.thrshld)]
         _,m = np.shape(X_)
-        print(f"VF returns features of dim {m}")
+        print(f"VF returns observations of dim {m}")
         return X_
-    
-class CorrelationFilter(BaseEstimator, TransformerMixin):
-    def __init__(self, thrshld):
-        self.thrshld = thrshld
-
-    def fit(self, X, y = None):
-        return self
-
-    def transform(self, X, y=None):
-        X_ = X.copy()
-        i = 0
-        _,m = np.shape(X_)
-        while i<m: 
-            _, m = np.shape(X_)
-            corr = np.zeros(shape = m, dtype = bool)
-            # Find correlation with all columns j>i
-            for j in range(i+1,m):
-                c, _ = pearsonr(X_[:,i],X_[:,j])
-                corr[j] = np.abs(c) > self.thrshld
-
-            X_ = np.delete(X_, corr, axis = 1)
-            if np.mod(m-i,50)== 0:
-                print(i,m)
-            i += 1
-        return X_
-
+#--------------------------------------------------------------------------------------------------------# 
 
 def main():
     ## Load data ##
@@ -74,29 +46,42 @@ def main():
     q1_plot = {
             "hist_plot":    False,
             "scree_plot":   False,
-            "metrics_plot": False, 
+            "metrics_plot": True, 
             "pair_plot":    False
             }
-   # question_1(X_,preprocessor, true_labels, q1_plot)
+    #question_1(feature_df, label_df, q1_plot)
    
     ## Question 2 ##
-    n_inits = 25
-    q2_clusters = range(2,8)
+    n_inits = 5
+    q2_clusters = range(2,25)
     models = [KMeans(n_init = n_inits, init = 'k-means++', n_clusters=i) for i in q2_clusters]
-    PACs = question_2(feature_df, models)
-    print(PACs)
-    plt.show()
-
-def question_1(X_, feature_df, label_df, plot):
-    ## Models ## 
+    #PACs = question_2(feature_df, models)
+    #print(PACs)
+    #plt.show()
+    
+    ## Feature importance test ##
     label_encoder = LabelEncoder()
     true_labels = label_encoder.fit_transform(label_df)
+    model = KMeans(n_init = 10, init = 'k-means++', n_clusters=4)
+    importance_test(feature_df, true_labels, model, verbose = True)
+    plt.show()
+
+def question_1(feature_df, label_df, plot):
+    ## Data ## 
+    X = feature_df.to_numpy()
     preprocessor = pre_processing()
-    n_inits = 5
-    clusters = list(range(2,8))
+    X = preprocessor.fit_transform(X)
+    label_encoder = LabelEncoder()
+    true_labels = label_encoder.fit_transform(label_df)
+    ## Models ## 
+    n_inits = 50
+    clusters = list(range(2,25))
     models = [KMeans(n_init = n_inits, init = 'k-means++', n_clusters=i) for i in clusters]
     gmodels = [mx.GaussianMixture(n_components = i,covariance_type="full", n_init = n_inits) for i in clusters]
+    hmodels = [AgglomerativeClustering(n_clusters=i) for i in clusters]
     models.extend(gmodels)
+    clusters.extend(clusters)
+    models.extend(hmodels)
     clusters.extend(clusters)
     ## Feature pre - visualisation ##
     if plot["hist_plot"]:
@@ -104,12 +89,12 @@ def question_1(X_, feature_df, label_df, plot):
     ## Initial vizualisation ## 
     pca = preprocessor["PCA"]
     if plot["scree_plot"]:
-        scree_plot(pca,0.75)
+        scree_plot(pca)
     if plot["pair_plot"]:
         pair_plot(pca, 5)
 
     ## Run clustering ##
-    metrics_df, predicted_labels = run_clustering(X_,models, clusters)
+    metrics_df, predicted_labels = run_clustering(X,models, clusters)
     if plot["metrics_plot"]:
         metrics_plot(metrics_df)
 
@@ -117,15 +102,15 @@ def question_1(X_, feature_df, label_df, plot):
     model = models[3]
     pred_labels = predicted_labels[model]
     if plot["pair_plot"]:
-        pair_plot(X_, 5, pred_labels)
-        pair_plot(X_, 5, true_labels)
+        pair_plot(X, 5, pred_labels)
+        pair_plot(X, 5, true_labels)
     ## "Best" metrics + visualize ##
     #pair_plot(X_, 5, true_labels)
 
     plt.show()
 def question_2(feature_df, 
-                    models, 
-                    k = 100, 
+                    models,     
+                    k = 50, 
                     p = 0.8, 
                     Q = (0.01, 0.99), 
                     verbose = False):
@@ -138,7 +123,7 @@ def question_2(feature_df,
            Q     - tuple of ecdf thresholds
     output:      - PAC_k value for specificed Q
 
-    TO DO: run several models, plot ecdf and return PAC for all of them (reuse plot_metrics), be able to run with different prepr. settings
+    TO DO: integrate Q1 and Q2 to be able to run it for different parameters for Q3
 
     """
     print("Testing stability")
@@ -186,7 +171,7 @@ def question_2(feature_df,
     X = feature_df.to_numpy()
     preprocessor = pre_processing()
     X = preprocessor.fit_transform(X)
-    n,m = np.shape(X)
+    n,_ = np.shape(X)
     for model in models:
         numerator   = np.zeros((n,n), dtype = float)         # We calculate the consensus matrix from the numerator 
         denominator = np.zeros((n,n), dtype = float)         # and denominator matrices i.e the sums of the connectivity 
@@ -206,14 +191,7 @@ def question_2(feature_df,
             subsample_indices = np.random.randint(low = 0, high = n, size = subsample_size)
             X_ = X[subsample_indices,:]                      # Our subsampled data   
             model_.fit(X_)                                   # Fit the clusterer to the data
-            try:                                             # Return the predicted labels
-                pred_labels = model_.labels_
-            except AttributeError:
-                try: 
-                    pred_labels = model_.predict(X_)
-                except AttributeError:
-                    print("Model has neither predict nor labels_ attr.")   
-                    raise AttributeError
+            pred_labels = predict_cluster(model_, X_)
 
             #  Now to update the numerator and denominator matrices
             numerator    = update_numerator(numerator, pred_labels,subsample_indices)
@@ -230,6 +208,35 @@ def question_2(feature_df,
         PACs[model] = ecdf(Q[1])-ecdf(Q[0]) # PAC values for the different models
     plt.legend(models)
     return PACs
+
+def importance_test(feature_df,
+                      ref_pred, 
+                         model, 
+                         k = 50,
+                         verbose = False):
+    """
+    Test the importance of features by
+    """
+    X = feature_df.to_numpy()
+    preprocessor = pre_processing()
+    X_ = preprocessor.fit_transform(X)
+    # Our initial unaltered prediction
+    _,m = np.shape(X)
+    proportion = np.zeros(m, dtype = float)
+    for i in range(m):
+        if verbose:
+                print("Iter ", i)
+        for j in range(k):
+            # We pick a pca component, scramle it and recompute our predictions, comparing them to the initial
+            X_ = X.copy()
+            np.random.shuffle(X_[:,2])
+            model_ = clone(model)
+            current_pred = predict_cluster(model_,X_)
+            proportion[i] += np.count_nonzero(current_pred == ref_pred)
+    proportion = proportion.flatten()
+    ecdf = ECDF(proportion)
+    plt.plot(ecdf.x, ecdf.y)
+    return 
 
 
 def run_clustering(X_,models, clusters):
@@ -265,7 +272,7 @@ def run_clustering(X_,models, clusters):
 
 def pre_processing(thrshld = 0.5, percent_variance = 0.8):
     preprocessor = Pipeline(steps=[
-                        ('variance_filter', VarianceFilter(thrshld)),
+                        ('variance_filter', VarianceThreshold(thrshld)),
                         ('scaler', RobustScaler()),
                         ('PCA', PCA(n_components=percent_variance, svd_solver = 'full'))])
     return preprocessor
@@ -291,7 +298,7 @@ def col_hist(df: pd.DataFrame, no_bins: int) -> None:
     df_var.hist(bins = no_bins, ax=axes[1], color = 'y')
     plt.show()
 
-def scree_plot(pca,thrshld):
+def scree_plot(pca):
     ratios = pca.explained_variance_ratio_
     ratio_sums = np.cumsum(ratios)
     comps = np.arange(1,len(ratios)+1)
@@ -312,6 +319,17 @@ def pair_plot(X,no_comps, labels = None):
     else: 
         _ = sns.pairplot(df)
     
+def predict_cluster(model, X):
+    model.fit(X)
+    try: 
+        prediction = model.labels_
+    except AttributeError:
+        try: 
+            prediction = model.predict(X)
+        except AttributeError:
+            print("Model has neither predict nor labels_ attr.")   
+            raise AttributeError
+    return prediction
  
 def metrics_plot(metrics: pd.DataFrame):
     no_models = metrics['Model'].nunique()
