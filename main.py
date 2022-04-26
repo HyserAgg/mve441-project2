@@ -1,3 +1,4 @@
+from argparse import ArgumentError
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -7,6 +8,7 @@ import matplotlib.pyplot as plt
 from os.path import exists
 from sklearn import cluster
 from statsmodels.distributions.empirical_distribution import ECDF
+from typing import Tuple
 
 # Scikit-learn stuff
 from sklearn.preprocessing import LabelEncoder, RobustScaler
@@ -198,6 +200,7 @@ def question_3():
     cluster_numbers = list(range(2,8))
 
 
+
 def run_clustering(X_,models, clusters):
     # Run clustering and return the metrics and the predicted labels for each model
     predicted_labels = {}
@@ -295,6 +298,30 @@ def metrics_plot(metrics: pd.DataFrame):
             axs[i,j].plot(clusters, metric_col)
             axs[i,j].set_title((model,col))
     plt.show()
+
+
+def consensus_matrix(X: np.ndarray, model_name: str, clusters_range: Tuple[int,int], sub_sample_ratio: float) -> np.ndarray:
+    """
+    Calculates the consensus matrix on a sub-sample of X for the specified model.
+    """
+    model = None
+    if model_name == "k-means":
+        pass
+    elif model_name == "gaussian-mix":
+        pass
+    else:
+        raise ArgumentError(f"no model defined for the name: {model_name}")
+
+    # Creates a sub-sample of X for each cluster number in
+    # clusters_range
+    X_m = {}
+    for ix in range(clusters_range[0], clusters_range[1]):
+        X_m[ix] = X[np.random.choice(X.shape[0], 2, replace=False), :]
+
+    
+
+    
+
 
 if __name__ == "__main__":
     main()
