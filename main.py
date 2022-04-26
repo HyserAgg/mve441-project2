@@ -196,8 +196,17 @@ def question_2(feature_df,
 
 
 def question_3():
+    cluster_range = (2,10)
+    kmean_models = [KMeans(cluster_numbers=ix) for ix in range(cluster_range[0], cluster_range[1]+1)]
+
+    for model in kmean_models:
+        m = connectivity_matrix()
+        j = indicator_matrix()
+
     cluster_methods = ["K-Means", "Gaussian Mixture"]
     cluster_numbers = list(range(2,8))
+
+
 
 
 
@@ -300,27 +309,41 @@ def metrics_plot(metrics: pd.DataFrame):
     plt.show()
 
 
-def consensus_matrix(X: np.ndarray, model_name: str, clusters_range: Tuple[int,int], sub_sample_ratio: float) -> np.ndarray:
+def consensus_matrix(X: np.ndarray, model) -> np.ndarray:
     """
-    Calculates the consensus matrix on a sub-sample of X for the specified model.
+    Calculates the consensus matrix for the given model on the supplied data.
     """
-    model = None
-    if model_name == "k-means":
-        pass
-    elif model_name == "gaussian-mix":
-        pass
-    else:
-        raise ArgumentError(f"no model defined for the name: {model_name}")
+    prediction = model.fit_predict(X)
 
-    # Creates a sub-sample of X for each cluster number in
-    # clusters_range
-    X_m = {}
-    for ix in range(clusters_range[0], clusters_range[1]):
-        X_m[ix] = X[np.random.choice(X.shape[0], 2, replace=False), :]
 
-    
 
-    
+def connectivity_matrix(cluster_indicees: np.ndarray) -> np.ndarray:
+    """
+    Calculates the connectivity matrix from a list of cluster indicees, each
+    corresponding to a different sample.
+    """
+    l = len(cluster_indicees)
+    m = np.zeros((l,l), dtype=int)
+    for ix in range(len(cluster_indicees)):
+        for jx in range(len(cluster_indicees)):
+            if cluster_indicees[ix] == cluster_indicees[jx]:
+                m[ix,jx] = 1
+
+    return m
+
+
+def indicator_matrix(sample_indicees: np.ndarray, max_samples: int) -> np.ndarray:
+    """
+    Calculates the indicator matrix from a list of sample indicees together
+    with the maximum number of samples, i.e. (largest sample index)-1.
+    """
+    m = np.zeros((max_samples, max_samples), dtype=int)
+    for ix in range(max_samples):
+        for jx in range(max_samples):
+            if ix in sample_indicees and jx in sample_indicees:
+                m[ix,jx] = 1
+
+    return m
 
 
 if __name__ == "__main__":
