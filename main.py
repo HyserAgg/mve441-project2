@@ -201,13 +201,46 @@ def question_3():
     label_df = pd.read_csv("data/labels.csv")
     X = feature_df.iloc[:,1:].to_numpy()
     
-    print("Computing cluster stability..")
-    c = consensus_matrix(X, "K-Means", 3, 0.8, 20)
-    c_flat = c.flatten("C")
+    print("Filtering features..")
+    X_filtered = [("Unfiltered", X)]
 
-    print("Plotting eCDF")
-    ecdf = ECDF(c_flat)
-    plt.plot(ecdf.x, ecdf.y)
+    # Variance feature filtering
+    pipeline1 = Pipeline(steps=[
+        ("variance_filter", VarianceFilter(0.8))
+    ])
+    pipeline2 = Pipeline(steps=[
+        ("variance_filter", VarianceFilter(0.5))
+    ])
+    pipeline3 = Pipeline(steps=[
+        ("variance_filter", VarianceFilter(0.3))
+    ])
+    X_filtered.append( ("Variance filtered 0.8", pipeline1.fit_transform(X)) )
+    X_filtered.append( ("Variance filtered 0.5", pipeline2.fit_transform(X)) )
+    X_filtered.append( ("Variance filtered 0.3", pipeline3.fit_transform(X)) )
+
+    # TODO: PCA feature filtering
+    pipeline4 = Pipeline(steps=[
+        ("PCA", PCA(n_components=1))
+    ])
+    pipeline5 = Pipeline(steps=[
+        ("PCA", PCA(n_components=10))
+    ])
+    pipeline6 = Pipeline(steps=[
+        ("PCA", PCA(n_components=50))
+    ])
+    X_filtered.append( ("PCA with 1 component", pipeline4.fit_transform(X)) )
+    X_filtered.append( ("PCA with 10 component", pipeline5.fit_transform(X)) )
+    X_filtered.append( ("PCA with 50 component", pipeline6.fit_transform(X)) )
+    
+    for data in X_filtered:
+        print(f"Computing cluster stability for {data[0]}..")
+        c = consensus_matrix(data[1], "K-Means", 5, 0.8, 20)
+        c_flat = c.flatten("C")
+
+        print("Plotting eCDF")
+        ecdf = ECDF(c_flat)
+        plt.plot(ecdf.x, ecdf.y, label=data[0])
+    plt.legend()
     plt.show()
 
 
