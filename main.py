@@ -19,14 +19,14 @@ from sklearn.cluster import KMeans
 from sklearn.feature_selection import VarianceThreshold
 from sklearn import mixture as mx
 from sklearn.base import BaseEstimator, TransformerMixin, clone
-from scipy.stats.stats import pearsonr
+from scipy.stats import pearsonr
 
 # Local import
 from filters import VarianceFilter, CorrelationFilter
 
 def main():
     ## Load data ##
-    label_df, feature_df = load_SEQ_data()
+    #label_df, feature_df = load_SEQ_data()
 
     ## Question 1 ##
     #q1_plot = {
@@ -196,18 +196,19 @@ def question_2(feature_df,
 
 
 def question_3():
-    cluster_range = (2,10)
-    kmean_models = [KMeans(cluster_numbers=ix) for ix in range(cluster_range[0], cluster_range[1]+1)]
+    print("Reading data..")
+    feature_df = pd.read_csv("data/data.csv")
+    label_df = pd.read_csv("data/labels.csv")
+    X = feature_df.iloc[:,1:].to_numpy()
+    
+    print("Computing cluster stability..")
+    c = consensus_matrix(X, "K-Means", 3, 0.8, 20)
+    c_flat = c.flatten("C")
 
-    for model in kmean_models:
-        m = connectivity_matrix()
-        j = indicator_matrix()
-
-    cluster_methods = ["K-Means", "Gaussian Mixture"]
-    cluster_numbers = list(range(2,8))
-
-
-
+    print("Plotting eCDF")
+    ecdf = ECDF(c_flat)
+    plt.plot(ecdf.x, ecdf.y)
+    plt.show()
 
 
 def run_clustering(X_,models, clusters):
@@ -309,25 +310,50 @@ def metrics_plot(metrics: pd.DataFrame):
     plt.show()
 
 
-def consensus_matrix(X: np.ndarray, model) -> np.ndarray:
+def consensus_matrix(X: np.ndarray, model_name: str, n_clusters: int, subsample_frac: float, M: int) -> np.ndarray:
     """
-    Calculates the consensus matrix for the given model on the supplied data.
+    Calculates the concensus matrix for the specifiend model on M different random sub-samples
+    of X. 
     """
-    prediction = model.fit_predict(X)
+    # Initiates the different models corresponding to the different 
+    # number of clusters
+    model = None
+    if model_name == "K-Means":
+        model = KMeans(n_clusters=n_clusters)
+    elif model_name == "Gaussian Mixture":
+        model = mx.GaussianMixture(n_components=n_clusters, n_init = 10)
+    else:
+        raise ArgumentError(f"cluster stability calculation for {model_name} is not defined.")
+
+    idx_list = [ix for ix in range(len(X))]
+    m = np.zeros((len(X),len(X)), dtype=float)    
+    j = np.zeros((len(X),len(X)), dtype=float)
+    for jx in range(M):
+        # Creates random sub-sample of data and fits model
+        # and predicts the cluster index for each of the sub-sampled
+        # observations
+        X_subsample_idx = np.random.choice(idx_list, size=int(np.floor(subsample_frac*len(X))), replace=False)
+        cluster_idx = model.fit_predict(np.take(X, X_subsample_idx, axis=0))
+
+        # Calculates connectivity and indicator matrix using above sub-sample
+        m += connectivity_matrix(cluster_indicees=cluster_idx, sample_indicees=X_subsample_idx, max_samples=len(X)).astype("float64")
+        j += indicator_matrix(sample_indicees=X_subsample_idx, max_samples=len(X)).astype("float64")
+    
+    # Calculates and returns the consensus matrix
+    c = np.divide(m,j)
+    return c
 
 
-
-def connectivity_matrix(cluster_indicees: np.ndarray) -> np.ndarray:
+def connectivity_matrix(cluster_indicees: np.ndarray, sample_indicees: np.ndarray, max_samples: int) -> np.ndarray:
     """
-    Calculates the connectivity matrix from a list of cluster indicees, each
-    corresponding to a different sample.
+    Calculates the connectivity matrix from a list of cluster indicees, list of the
+    observation indicees and the maximum number of samples, i.e. (largest sample index)+1.
     """
-    l = len(cluster_indicees)
-    m = np.zeros((l,l), dtype=int)
+    m = np.zeros((max_samples, max_samples), dtype=int)
     for ix in range(len(cluster_indicees)):
         for jx in range(len(cluster_indicees)):
             if cluster_indicees[ix] == cluster_indicees[jx]:
-                m[ix,jx] = 1
+                m[sample_indicees[ix],sample_indicees[jx]] = 1
 
     return m
 
@@ -335,7 +361,7 @@ def connectivity_matrix(cluster_indicees: np.ndarray) -> np.ndarray:
 def indicator_matrix(sample_indicees: np.ndarray, max_samples: int) -> np.ndarray:
     """
     Calculates the indicator matrix from a list of sample indicees together
-    with the maximum number of samples, i.e. (largest sample index)-1.
+    with the maximum number of samples, i.e. (largest sample index)+1.
     """
     m = np.zeros((max_samples, max_samples), dtype=int)
     for ix in range(max_samples):
