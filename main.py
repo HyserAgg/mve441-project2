@@ -26,7 +26,8 @@ from filters import VarianceFilter, CorrelationFilter
 
 def main():
     ## Load data ##
-    #label_df, feature_df = load_SEQ_data()
+    feature_df = pd.read_csv("data/data.csv").iloc[:,1:]
+    label_df = pd.read_csv("data/labels.csv")["Class"]
 
     ## Question 1 ##
     #q1_plot = {
@@ -38,15 +39,15 @@ def main():
    # question_1(X_,preprocessor, true_labels, q1_plot)
    
     ## Question 2 ##
-    #n_inits = 25
-    #q2_clusters = range(2,8)
-    #models = [KMeans(n_init = n_inits, init = 'k-means++', n_clusters=i) for i in q2_clusters]
-    #PACs = question_2(feature_df, models)
-    #print(PACs)
-    #plt.show()
+    n_inits = 25
+    q2_clusters = range(2,8)
+    models = [KMeans(n_init = n_inits, init = 'k-means++', n_clusters=i) for i in q2_clusters]
+    PACs = question_2(feature_df, models)
+    print(PACs)
+    plt.savefig("./figures/concensus_ecdf.png")
 
     ## Question 3 ##
-    question_3()
+    #question_3()
 
 def question_1(X_, feature_df, label_df, plot):
     ## Models ## 
