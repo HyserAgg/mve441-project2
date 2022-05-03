@@ -39,15 +39,15 @@ def main():
    # question_1(X_,preprocessor, true_labels, q1_plot)
    
     ## Question 2 ##
-    n_inits = 25
-    q2_clusters = range(2,8)
-    models = [KMeans(n_init = n_inits, init = 'k-means++', n_clusters=i) for i in q2_clusters]
-    PACs = question_2(feature_df, models)
-    print(PACs)
-    plt.savefig("./figures/concensus_ecdf.png")
+    #n_inits = 25
+    #q2_clusters = range(2,8)
+    #models = [KMeans(n_init = n_inits, init = 'k-means++', n_clusters=i) for i in q2_clusters]
+    #PACs = question_2(feature_df, models)
+    #print(PACs)
+    #plt.savefig("./figures/concensus_ecdf.png")
 
     ## Question 3 ##
-    #question_3()
+    question_3()
 
 def question_1(X_, feature_df, label_df, plot):
     ## Models ## 
@@ -215,9 +215,9 @@ def question_3():
     pipeline3 = Pipeline(steps=[
         ("variance_filter", VarianceFilter(0.3))
     ])
-    X_filtered.append( ("Variance filtered 0.8", pipeline1.fit_transform(X)) )
-    X_filtered.append( ("Variance filtered 0.5", pipeline2.fit_transform(X)) )
-    X_filtered.append( ("Variance filtered 0.3", pipeline3.fit_transform(X)) )
+    #X_filtered.append( ("Variance filtered 0.8", pipeline1.fit_transform(X)) )
+    #X_filtered.append( ("Variance filtered 0.5", pipeline2.fit_transform(X)) )
+    #X_filtered.append( ("Variance filtered 0.3", pipeline3.fit_transform(X)) )
 
     # TODO: PCA feature filtering
     pipeline4 = Pipeline(steps=[
@@ -229,14 +229,15 @@ def question_3():
     pipeline6 = Pipeline(steps=[
         ("PCA", PCA(n_components=50))
     ])
-    X_filtered.append( ("PCA with 1 component", pipeline4.fit_transform(X)) )
-    X_filtered.append( ("PCA with 10 component", pipeline5.fit_transform(X)) )
-    X_filtered.append( ("PCA with 50 component", pipeline6.fit_transform(X)) )
+    #X_filtered.append( ("PCA with 1 component", pipeline4.fit_transform(X)) )
+    #X_filtered.append( ("PCA with 10 component", pipeline5.fit_transform(X)) )
+    #X_filtered.append( ("PCA with 50 component", pipeline6.fit_transform(X)) )
     
     for data in X_filtered:
         print(f"Computing cluster stability for {data[0]}..")
-        c = consensus_matrix(data[1], "K-Means", 5, 0.8, 20)
-        c_flat = c.flatten("C")
+        c = consensus_matrix(data[1], "K-Means", 5, 0.8, 100)
+        c_flat = c.flatten()
+        print(c_flat)
 
         print("Plotting eCDF")
         ecdf = ECDF(c_flat)
@@ -344,66 +345,98 @@ def metrics_plot(metrics: pd.DataFrame):
     plt.show()
 
 
-def consensus_matrix(X: np.ndarray, model_name: str, n_clusters: int, subsample_frac: float, M: int) -> np.ndarray:
+def consensus_matrix(X: np.ndarray, model_name: str, n_clusters: int, p: float, M: int, verbose=False) -> np.ndarray:
     """
     Calculates the concensus matrix for the specifiend model on M different random sub-samples
     of X. 
     """
+    def update_numerator(numerator, labels, subsample_indices):
+        """
+        inputs:
+               numerator   - matrix dim n*n; sum of connectivity matrices
+               pred_labels - vector of dim ~0.8n of labels, remember that this is a subsample¨
+               connect     - connectivity matrix for current subsample run
+
+        output:            - added 1 to all (i,j) where labels(i) = labels(j)
+            
+        """    
+        connect = np.zeros((n,n), dtype = float)
+        unique_labels = np.unique(labels)
+        for label in unique_labels:
+            active_indices = np.nonzero(labels == label)                   # The indeces of where pred_labels equals label 
+            active_subsample_indices = subsample_indices[active_indices]   # The rows of X where pred. is label
+            for i, ind in enumerate(active_subsample_indices):      
+                connect[ind,active_subsample_indices[i:]] = 1.0            # For a given active index i we do : d(i,j) & d(j,i) += 1 
+                connect[active_subsample_indices[i:],ind] = 1.0            # for all j coming after i in active.ss. indices
+        np.add(numerator, connect, numerator)                              # Sum the connectivity matrices         
+        return numerator
+
+    def update_denominator(denominator, subsample_indices):
+        """
+        inputs: 
+                denominator - matrix dim n*n; sum of indication matrices
+                ss_indices  - vector of dim ~pn of choses indices for current subsample
+                indicator   - indicator matrix for current subsample
+
+        output:             - added ones to all (i,j) in ss_indices 
+            
+        """
+        indicator = np.zeros((n,n), dtype = float)
+        unique_indices = np.unique(subsample_indices)
+        for i, ind in enumerate(unique_indices):          
+            indicator[ind,unique_indices[i:]] = 1.0      # We choose an index i, and for all other subsampled indeces j 
+            indicator[unique_indices[i:],ind] = 1.0      # we set d(i,j) and d(j,i) to one
+        np.add(denominator, indicator, denominator)      # Sum the indicator matrices
+        return denominator
+
     # Initiates the different models corresponding to the different 
     # number of clusters
     model = None
     if model_name == "K-Means":
-        model = KMeans(n_clusters=n_clusters)
+        model = KMeans(n_clusters=n_clusters, n_init=25)
     elif model_name == "Gaussian Mixture":
-        model = mx.GaussianMixture(n_components=n_clusters, n_init = 10)
+        model = mx.GaussianMixture(n_components=n_clusters, n_init = 25)
     else:
         raise ArgumentError(f"cluster stability calculation for {model_name} is not defined.")
 
-    idx_list = [ix for ix in range(len(X))]
-    m = np.zeros((len(X),len(X)), dtype=float)    
-    j = np.zeros((len(X),len(X)), dtype=float)
-    for jx in range(M):
-        # Creates random sub-sample of data and fits model
-        # and predicts the cluster index for each of the sub-sampled
-        # observations
-        X_subsample_idx = np.random.choice(idx_list, size=int(np.floor(subsample_frac*len(X))), replace=False)
-        cluster_idx = model.fit_predict(np.take(X, X_subsample_idx, axis=0))
+    n = len(X)
+    connectivity_matrix   = np.zeros((n,n), dtype = float)         # We calculate the consensus matrix from the numerator 
+    indicator_matrix = np.zeros((n,n), dtype = float)         # and denominator matrices i.e the sums of the connectivity 
+    consensus_matrix   = np.zeros((n,n), dtype = float)         # and identicator matrices, respectively
+                                                
+    subsample_size = int(np.floor(p*n))                
+    for i in range(M):
+        model_ = clone(model)                            # Clone model and if possible set a random_state
+        try: 
+            s = np.random.randint(1e3)
+            model_.random_state = s
+            if verbose:
+                print(f'At iteration {i}, with random state {s}')
+        except AttributeError: 
+            print("No random state attribute")
+            pass
+        subsample_indices = np.random.randint(low = 0, high = n, size = subsample_size)
+        X_ = X[subsample_indices,:]                      # Our subsampled data   
+        model_.fit(X_)                                   # Fit the clusterer to the data
+        try:                                             # Return the predicted labels
+            pred_labels = model_.labels_
+        except AttributeError:
+            try: 
+                pred_labels = model_.predict(X_)
+            except AttributeError:
+                print("Model has neither predict nor labels_ attr.")   
+                raise AttributeError
 
-        # Calculates connectivity and indicator matrix using above sub-sample
-        m += connectivity_matrix(cluster_indicees=cluster_idx, sample_indicees=X_subsample_idx, max_samples=len(X)).astype("float64")
-        j += indicator_matrix(sample_indicees=X_subsample_idx, max_samples=len(X)).astype("float64")
-    
-    # Calculates and returns the consensus matrix
-    c = np.divide(m,j)
-    return c
+        #  Now to update the numerator and denominator matrices
+        connectivity_matrix = update_numerator(connectivity_matrix, pred_labels, subsample_indices)
+        indicator_matrix = update_denominator(indicator_matrix, subsample_indices)
 
+        assert(np.all(connectivity_matrix<=indicator_matrix))
+        
+    assert(np.all(indicator_matrix != 0))
+    np.divide(connectivity_matrix, indicator_matrix, consensus_matrix, dtype = float)
 
-def connectivity_matrix(cluster_indicees: np.ndarray, sample_indicees: np.ndarray, max_samples: int) -> np.ndarray:
-    """
-    Calculates the connectivity matrix from a list of cluster indicees, list of the
-    observation indicees and the maximum number of samples, i.e. (largest sample index)+1.
-    """
-    m = np.zeros((max_samples, max_samples), dtype=int)
-    for ix in range(len(cluster_indicees)):
-        for jx in range(len(cluster_indicees)):
-            if cluster_indicees[ix] == cluster_indicees[jx]:
-                m[sample_indicees[ix],sample_indicees[jx]] = 1
-
-    return m
-
-
-def indicator_matrix(sample_indicees: np.ndarray, max_samples: int) -> np.ndarray:
-    """
-    Calculates the indicator matrix from a list of sample indicees together
-    with the maximum number of samples, i.e. (largest sample index)+1.
-    """
-    m = np.zeros((max_samples, max_samples), dtype=int)
-    for ix in range(max_samples):
-        for jx in range(max_samples):
-            if ix in sample_indicees and jx in sample_indicees:
-                m[ix,jx] = 1
-
-    return m
+    return consensus_matrix
 
 
 if __name__ == "__main__":
