@@ -3,12 +3,13 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import diptest
 
 # General 'from' import
 from os.path import exists
 from sklearn import cluster
 from statsmodels.distributions.empirical_distribution import ECDF
-from typing import Tuple
+from typing import Any
 
 # Scikit-learn stuff
 from sklearn.preprocessing import LabelEncoder, RobustScaler
@@ -22,7 +23,7 @@ from sklearn.base import BaseEstimator, TransformerMixin, clone
 from scipy.stats import pearsonr
 
 # Local import
-from filters import VarianceFilter, CorrelationFilter
+from filters import UnimodalFilter, VarianceFilter
 
 def main():
     ## Load data ##
@@ -89,7 +90,7 @@ def question_1(X_, feature_df, label_df, plot):
 
 def question_2(feature_df, 
                     models, 
-                    k = 100, 
+                    M = 100, 
                     p = 0.8, 
                     Q = (0.01, 0.99), 
                     verbose = False):
@@ -106,90 +107,17 @@ def question_2(feature_df,
 
     """
     print("Testing stability")
-    def update_numerator(numerator, labels, subsample_indices):
-        """
-        inputs:
-               numerator   - matrix dim n*n; sum of connectivity matrices
-               pred_labels - vector of dim ~0.8n of labels, remember that this is a subsample¨
-               connect     - connectivity matrix for current subsample run
-
-        output:            - added 1 to all (i,j) where labels(i) = labels(j)
-            
-        """    
-        connect = np.zeros((n,n), dtype = float)
-        unique_labels = np.unique(labels)
-        for label in unique_labels:
-            active_indices = np.nonzero(labels == label)                   # The indeces of where pred_labels equals label 
-            active_subsample_indices = subsample_indices[active_indices]   # The rows of X where pred. is label
-            for i, ind in enumerate(active_subsample_indices):      
-                connect[ind,active_subsample_indices[i:]] = 1.0            # For a given active index i we do : d(i,j) & d(j,i) += 1 
-                connect[active_subsample_indices[i:],ind] = 1.0            # for all j coming after i in active.ss. indices
-        np.add(numerator, connect, numerator)                              # Sum the connectivity matrices         
-        return numerator
-
-    def update_denominator(denominator, subsample_indices):
-        """
-        inputs: 
-                denominator - matrix dim n*n; sum of indication matrices
-                ss_indices  - vector of dim ~pn of choses indices for current subsample
-                indicator   - indicator matrix for current subsample
-
-        output:             - added ones to all (i,j) in ss_indices 
-            
-        """
-        indicator = np.zeros((n,n), dtype = float)
-        unique_indices = np.unique(subsample_indices)
-        for i, ind in enumerate(unique_indices):          
-            indicator[ind,unique_indices[i:]] = 1.0      # We choose an index i, and for all other subsampled indeces j 
-            indicator[unique_indices[i:],ind] = 1.0      # we set d(i,j) and d(j,i) to one
-        np.add(denominator, indicator, denominator)      # Sum the indicator matrices
-        return denominator
-
     PACs = {}
     
     X = feature_df.to_numpy()
     preprocessor = pre_processing()
     X = preprocessor.fit_transform(X)
-    n,m = np.shape(X)
+    n, _ = np.shape(X)
     for model in models:
-        numerator   = np.zeros((n,n), dtype = float)         # We calculate the consensus matrix from the numerator 
-        denominator = np.zeros((n,n), dtype = float)         # and denominator matrices i.e the sums of the connectivity 
-        consensus   = np.zeros((n,n), dtype = float)         # and identicator matrices, respectively
-                                                    
-        subsample_size = int(np.floor(p*n))                
-        for i in range(k):
-            model_ = clone(model)                            # Clone model and if possible set a random_state
-            try: 
-                s = np.random.randint(1e3)
-                model_.random_state = s
-                if verbose:
-                    print(f'At iteration {i}, with random state {s}')
-            except AttributeError: 
-                print("No random state attribute")
-                pass
-            subsample_indices = np.random.randint(low = 0, high = n, size = subsample_size)
-            X_ = X[subsample_indices,:]                      # Our subsampled data   
-            model_.fit(X_)                                   # Fit the clusterer to the data
-            try:                                             # Return the predicted labels
-                pred_labels = model_.labels_
-            except AttributeError:
-                try: 
-                    pred_labels = model_.predict(X_)
-                except AttributeError:
-                    print("Model has neither predict nor labels_ attr.")   
-                    raise AttributeError
+        c = consensus_matrix(X, model, p, M)
+        c_flat = c.flatten()     # Consensus is now a 1D vector of (hopefully) mostly ones and zeros
 
-            #  Now to update the numerator and denominator matrices
-            numerator    = update_numerator(numerator, pred_labels,subsample_indices)
-            denominator  = update_denominator(denominator,subsample_indices)
-
-            assert(np.all(numerator<=denominator))
-            
-        assert(np.all(denominator != 0))
-        np.divide(numerator, denominator, consensus, dtype = float)
-        consensus = consensus.flatten()     # Consensus is now a 1D vector of (hopefully) mostly ones and zeros
-
-        ecdf = ECDF(consensus)              # The empirical cumulative distribution function
+        ecdf = ECDF(c_flat)              # The empirical cumulative distribution function
         plt.plot(ecdf.x, ecdf.y)
         PACs[model] = ecdf(Q[1])-ecdf(Q[0]) # PAC values for the different models
     plt.legend(models)
@@ -197,6 +125,9 @@ def question_2(feature_df,
 
 
 def question_3():
+    # Model on which stability is tested on
+    model = KMeans(n_clusters=5, n_init=25)
+
     print("Reading data..")
     feature_df = pd.read_csv("data/data.csv")
     label_df = pd.read_csv("data/labels.csv")
@@ -204,6 +135,12 @@ def question_3():
     
     print("Filtering features..")
     X_filtered = [("Unfiltered", X)]
+
+    # Unimodality filtering
+    pipeline7 = Pipeline(steps=[
+        ("unimodality_filter", UnimodalFilter())
+    ])
+    X_filtered.append( ("Unimodal filtered alpha = 0.05", pipeline7.fit_transform(X)) )
 
     # Variance feature filtering
     pipeline1 = Pipeline(steps=[
@@ -219,7 +156,8 @@ def question_3():
     #X_filtered.append( ("Variance filtered 0.5", pipeline2.fit_transform(X)) )
     #X_filtered.append( ("Variance filtered 0.3", pipeline3.fit_transform(X)) )
 
-    # TODO: PCA feature filtering
+
+    # PCA filtering
     pipeline4 = Pipeline(steps=[
         ("PCA", PCA(n_components=1))
     ])
@@ -233,17 +171,19 @@ def question_3():
     #X_filtered.append( ("PCA with 10 component", pipeline5.fit_transform(X)) )
     #X_filtered.append( ("PCA with 50 component", pipeline6.fit_transform(X)) )
     
+    PACs = {}
     for data in X_filtered:
         print(f"Computing cluster stability for {data[0]}..")
-        c = consensus_matrix(data[1], "K-Means", 5, 0.8, 100)
+        c = consensus_matrix(data[1], model, 0.8, 100)
         c_flat = c.flatten()
-        print(c_flat)
 
-        print("Plotting eCDF")
         ecdf = ECDF(c_flat)
+        PACs[data[0]] = ecdf(0.99) - ecdf(0.01)
         plt.plot(ecdf.x, ecdf.y, label=data[0])
     plt.legend()
-    plt.show()
+    plt.title(model)
+    plt.savefig(f"./figures/{model}_features_stability.png")
+    print(PACs)
 
 
 def run_clustering(X_,models, clusters):
@@ -345,7 +285,7 @@ def metrics_plot(metrics: pd.DataFrame):
     plt.show()
 
 
-def consensus_matrix(X: np.ndarray, model_name: str, n_clusters: int, p: float, M: int, verbose=False) -> np.ndarray:
+def consensus_matrix(X: np.ndarray, model: Any, p: float, M: int, verbose=False) -> np.ndarray:
     """
     Calculates the concensus matrix for the specifiend model on M different random sub-samples
     of X. 
@@ -388,16 +328,6 @@ def consensus_matrix(X: np.ndarray, model_name: str, n_clusters: int, p: float, 
             indicator[unique_indices[i:],ind] = 1.0      # we set d(i,j) and d(j,i) to one
         np.add(denominator, indicator, denominator)      # Sum the indicator matrices
         return denominator
-
-    # Initiates the different models corresponding to the different 
-    # number of clusters
-    model = None
-    if model_name == "K-Means":
-        model = KMeans(n_clusters=n_clusters, n_init=25)
-    elif model_name == "Gaussian Mixture":
-        model = mx.GaussianMixture(n_components=n_clusters, n_init = 25)
-    else:
-        raise ArgumentError(f"cluster stability calculation for {model_name} is not defined.")
 
     n = len(X)
     connectivity_matrix   = np.zeros((n,n), dtype = float)         # We calculate the consensus matrix from the numerator 
