@@ -6,28 +6,24 @@ import json
 
 # General 'from' import
 from os.path import exists
-from sklearn import cluster
 from statsmodels.distributions.empirical_distribution import ECDF
 from typing import Any
 
 # Scikit-learn stuff
-from sklearn.preprocessing import LabelEncoder, RobustScaler
+from sklearn.preprocessing import LabelEncoder, RobustScaler, MinMaxScaler
 from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score, fowlkes_mallows_score, adjusted_rand_score
 from sklearn.pipeline import Pipeline
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, AgglomerativeClustering
 from sklearn.feature_selection import VarianceThreshold
 from sklearn import mixture as mx
-from sklearn.base import BaseEstimator, TransformerMixin, clone
-from scipy.stats import pearsonr
+from sklearn.base import clone
 
 # Local import
 from filter import UnimodalFilter, MultimodalFilter, VarianceFilter
 
 
 def main():
-
-
     ## Question 1 ##
     q1_plot = {
             "hist_plot":    False,
@@ -35,20 +31,26 @@ def main():
             "metrics_plot": True, 
             "pair_plot":    True
             }
-
-    question_1(q1_plot)
+    #question_1(q1_plot)
    
     ## Question 2 ##
     #question_2()
     
+    
     ## Question 3 ## 
+    question_3()
 
     plt.show()
+    
 
 def question_1(plot):
     ## Data ## 
-    label_df, feature_df = load_SEQ_data();
-    X = feature_df.to_numpy()
+    print("Reading data..")
+    feature_df = pd.read_csv("data/data.csv")
+    label_df = pd.read_csv("data/labels.csv")["Class"]
+    X = feature_df.iloc[:,1:].to_numpy()
+
+
     preprocessor = pre_processing()
     X = preprocessor.fit_transform(X)
     true_labels = LabelEncoder().fit_transform(label_df)
@@ -92,7 +94,9 @@ def question_1(plot):
     return 
 
 def question_2():
-    _, feature_df = load_SEQ_data();
+    print("Reading data..")
+    feature_df = pd.read_csv("data/data.csv").iloc[:,1:]
+
     n_inits = 100
     clusters = list(range(2,10))
     cases = [
