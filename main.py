@@ -127,8 +127,7 @@ def question_2(feature_df,
 def question_3():
     # Model on which stability is tested on and metrics
     # to calculate on the resulting model
-    model = KMeans(n_clusters=5, n_init=10)
-    metric_functions = [silhouette_score, davies_bouldin_score, calinski_harabasz_score]
+    model = KMeans(n_clusters=5, n_init=25)
 
     print("Reading data..")
     feature_df = pd.read_csv("data/data.csv")
@@ -142,7 +141,7 @@ def question_3():
     
     print("Filtering features..")
     X_filtered = []
-    #X_filtered = [("Unfiltered", X)]
+    X_filtered = [("Unfiltered", X)]
 
     # Unimodality filtering
     pipeline7 = Pipeline(steps=[
@@ -164,9 +163,9 @@ def question_3():
     pipeline3 = Pipeline(steps=[
         ("variance_filter", VarianceFilter(0.3))
     ])
-    #X_filtered.append( ("Variance filtered 0.8", pipeline1.fit_transform(X)) )
-    #X_filtered.append( ("Variance filtered 0.5", pipeline2.fit_transform(X)) )
-    #X_filtered.append( ("Variance filtered 0.3", pipeline3.fit_transform(X)) )
+    X_filtered.append( ("Variance filtered 0.8", pipeline1.fit_transform(X)) )
+    X_filtered.append( ("Variance filtered 0.5", pipeline2.fit_transform(X)) )
+    X_filtered.append( ("Variance filtered 0.3", pipeline3.fit_transform(X)) )
 
 
     # PCA filtering
@@ -179,9 +178,9 @@ def question_3():
     pipeline6 = Pipeline(steps=[
         ("PCA", PCA(n_components=50))
     ])
-    #X_filtered.append( ("PCA with 1 component", pipeline4.fit_transform(X)) )
-    #X_filtered.append( ("PCA with 10 component", pipeline5.fit_transform(X)) )
-    #X_filtered.append( ("PCA with 50 component", pipeline6.fit_transform(X)) )
+    X_filtered.append( ("PCA with 1 component", pipeline4.fit_transform(X)) )
+    X_filtered.append( ("PCA with 10 component", pipeline5.fit_transform(X)) )
+    X_filtered.append( ("PCA with 50 component", pipeline6.fit_transform(X)) )
     
     metrics = {}
     for data in X_filtered:

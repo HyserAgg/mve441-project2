@@ -63,7 +63,7 @@ class MultimodalFilter(BaseEstimator, TransformerMixin):
             pvals[feature_idx] = pval
         X_ = X_copy[:, (pvals < self.sig_level)]
 
-        print(f"Unimodality filter returns features of dimension {len(X_[0])}")
+        print(f"Multimodality filter returns features of dimension {len(X_[0])}")
         return X_
 
             
