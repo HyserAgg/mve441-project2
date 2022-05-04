@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-import diptest
+import json
 
 # General 'from' import
 from os.path import exists
@@ -14,7 +14,7 @@ from typing import Any
 # Scikit-learn stuff
 from sklearn.preprocessing import LabelEncoder, RobustScaler
 from sklearn.decomposition import PCA
-from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score 
+from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score, fowlkes_mallows_score, adjusted_rand_score
 from sklearn.pipeline import Pipeline
 from sklearn.cluster import KMeans
 from sklearn.feature_selection import VarianceThreshold
@@ -23,7 +23,7 @@ from sklearn.base import BaseEstimator, TransformerMixin, clone
 from scipy.stats import pearsonr
 
 # Local import
-from filters import UnimodalFilter, VarianceFilter
+from filters import UnimodalFilter, MultimodalFilter, VarianceFilter
 
 def main():
     ## Load data ##
@@ -125,22 +125,34 @@ def question_2(feature_df,
 
 
 def question_3():
-    # Model on which stability is tested on
-    model = KMeans(n_clusters=5, n_init=25)
+    # Model on which stability is tested on and metrics
+    # to calculate on the resulting model
+    model = KMeans(n_clusters=5, n_init=10)
+    metric_functions = [silhouette_score, davies_bouldin_score, calinski_harabasz_score]
 
     print("Reading data..")
     feature_df = pd.read_csv("data/data.csv")
     label_df = pd.read_csv("data/labels.csv")
     X = feature_df.iloc[:,1:].to_numpy()
+    y = label_df["Class"].to_numpy()
+
+    # Standardising data
+    print("Standardising data..")
+    X = RobustScaler().fit_transform(X)
     
     print("Filtering features..")
-    X_filtered = [("Unfiltered", X)]
+    X_filtered = []
+    #X_filtered = [("Unfiltered", X)]
 
     # Unimodality filtering
     pipeline7 = Pipeline(steps=[
         ("unimodality_filter", UnimodalFilter())
     ])
+    pipeline8 = Pipeline(steps=[
+        ("multiimodality_filter", MultimodalFilter())
+    ])
     X_filtered.append( ("Unimodal filtered alpha = 0.05", pipeline7.fit_transform(X)) )
+    X_filtered.append( ("Multimodal filtered alpha = 0.05", pipeline8.fit_transform(X)) )
 
     # Variance feature filtering
     pipeline1 = Pipeline(steps=[
@@ -171,19 +183,34 @@ def question_3():
     #X_filtered.append( ("PCA with 10 component", pipeline5.fit_transform(X)) )
     #X_filtered.append( ("PCA with 50 component", pipeline6.fit_transform(X)) )
     
-    PACs = {}
+    metrics = {}
     for data in X_filtered:
         print(f"Computing cluster stability for {data[0]}..")
-        c = consensus_matrix(data[1], model, 0.8, 100)
+        c = consensus_matrix(data[1], model, 0.8, 50)
         c_flat = c.flatten()
-
         ecdf = ECDF(c_flat)
-        PACs[data[0]] = ecdf(0.99) - ecdf(0.01)
         plt.plot(ecdf.x, ecdf.y, label=data[0])
+
+
+        # Training model on all data and predics labels
+        print(f"Fitting and predicting labels for {data[0]}..")
+        pred_labels = model.fit_predict(data[1])
+
+        # Calculating some metrics
+        print(f"Calculating metrics for {data[0]}..")
+        metrics[data[0]] = {
+            "PAC": ecdf(0.99) - ecdf(0.01),
+            "silhouette_score": silhouette_score(data[1], pred_labels),
+            "davies_bouldin_score": davies_bouldin_score(data[1], pred_labels),
+            "calinski_harabasz_score": calinski_harabasz_score(data[1], pred_labels),
+            "fowlkes_mallows_score": fowlkes_mallows_score(y, pred_labels),
+            "adjusted_rand_score": adjusted_rand_score(y, pred_labels), 
+        }        
+
     plt.legend()
     plt.title(model)
     plt.savefig(f"./figures/{model}_features_stability.png")
-    print(PACs)
+    print(json.dumps(metrics, indent=2))
 
 
 def run_clustering(X_,models, clusters):
@@ -266,7 +293,6 @@ def pair_plot(X,no_comps, labels = None):
     else: 
         _ = sns.pairplot(df)
     
- 
 def metrics_plot(metrics: pd.DataFrame):
     no_models = metrics['Model'].nunique()
     models = metrics['Model'].unique()
@@ -283,7 +309,6 @@ def metrics_plot(metrics: pd.DataFrame):
             axs[i,j].plot(clusters, metric_col)
             axs[i,j].set_title((model,col))
     plt.show()
-
 
 def consensus_matrix(X: np.ndarray, model: Any, p: float, M: int, verbose=False) -> np.ndarray:
     """

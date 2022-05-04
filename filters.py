@@ -40,17 +40,33 @@ class UnimodalFilter(BaseEstimator, TransformerMixin):
             dip, pval = diptest.diptest(X[:,feature_idx])
             dips[feature_idx] = dip
             pvals[feature_idx] = pval
+        X_ = X_copy[:, (pvals >= self.sig_level)]
+
+        print(f"Unimodality filter returns features of dimension {len(X_[0])}")
+        return X_
+
+class MultimodalFilter(BaseEstimator, TransformerMixin):
+    def __init__(self, sig_level=0.05) -> None:
+        super().__init__()
+        self.sig_level = sig_level
+
+    def fit(self, X, y = None):
+        return self
+
+    def transform(self, X: np.ndarray, y=None):
+        X_copy = X.copy()
+        dips = np.zeros(len(X_copy[0]))
+        pvals = np.zeros(len(X_copy[0]))
+        for feature_idx in range(len(X_copy[0])):
+            dip, pval = diptest.diptest(X[:,feature_idx])
+            dips[feature_idx] = dip
+            pvals[feature_idx] = pval
         X_ = X_copy[:, (pvals < self.sig_level)]
 
         print(f"Unimodality filter returns features of dimension {len(X_[0])}")
-        return X_copy[:, (pvals < self.sig_level)]
+        return X_
 
-        
-
-
-
-    
-    
+            
 class CorrelationFilter(BaseEstimator, TransformerMixin):
     def __init__(self, thrshld):
         self.thrshld = thrshld
