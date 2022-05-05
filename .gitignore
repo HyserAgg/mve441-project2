@@ -2,6 +2,9 @@
 *.tar.gz
 *.csv
 *.h5
+
+*.pyc
+
 # JupyterNotebook specific file to ignore
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
